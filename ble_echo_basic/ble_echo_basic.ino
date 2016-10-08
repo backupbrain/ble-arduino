@@ -1,67 +1,65 @@
-#include <CurieBle.h>
+#include "CurieBle.h"
 
-static const char* BLUETOOTH_DEVICE_NAME = "EchoServer";
+static const char* bluetoothDeviceName = "EchoServer";
 
-static const char* SERVICE_UUID = "180C"; 
-static const char* CHARACTERISTIC_UUID = "2A56";
-static const int   TRANSMISSION_LENGTH = 20;
+static const int   characteristicTransmissionLength = 20;
 
-char message[TRANSMISSION_LENGTH];
-int messageLength;
+char bleMessage[characteristicTransmissionLength];
+int bleMessageLength;
 const char* uuid;
-bool dataWritten = false; 
+bool bleDataWritten = false; 
 
 
-BLEService service(SERVICE_UUID);
+BLEService service("180C");
 BLECharacteristic characteristic(
-  CHARACTERISTIC_UUID,
+  "2A56",
   BLEWrite | BLERead | BLENotify,
-  TRANSMISSION_LENGTH
+  characteristicTransmissionLength
 );
 
 BLEPeripheral blePeripheral;
 
 
 void onCharacteristicWritten(BLECentral& central, BLECharacteristic &characteristic) {
-  dataWritten = true;
+  bleDataWritten = true;
   uuid = characteristic.uuid();
 
-  messageLength = characteristic.valueLength();
-  memcpy((char*) message, (const char*) characteristic.value(), messageLength);
+  bleMessageLength = characteristic.valueLength();
+  strcpy((char*) bleMessage, (const char*) characteristic.value());
 }
 
-// Client connected.  Print MAC address
-void onClientConnected(BLECentral& central) {
-  Serial.print("Device connected: ");
+// Central connected.  Print MAC address
+void onCentralConnected(BLECentral& central) {
+  Serial.print("Central connected: ");
   Serial.println(central.address());
 }
 
-// Client disconnected
-void onClientDisconnected(BLECentral& central) {
-  Serial.println("Device disconnected");
+// Central disconnected
+void onCentralDisconnected(BLECentral& central) {
+  Serial.println("Central disconnected");
 }
 
 
-void sendMessage(unsigned char* message) {
+void sendBleMessage(unsigned char* bleMessage) {
   Serial.print("Sending message: ");
-  Serial.println((char*) message);
-  characteristic.setValue((const unsigned char*) message, messageLength);
+  Serial.println((char*) bleMessage);
+  characteristic.setValue((const unsigned char*) bleMessage, bleMessageLength);
 }
 
 void setup() {
   Serial.begin(9600);
   while (!Serial) {;}
-  blePeripheral.setLocalName(BLUETOOTH_DEVICE_NAME);
+  blePeripheral.setLocalName(bluetoothDeviceName);
 
-  // attach callback when client connects
+  // attach callback when central connects
   blePeripheral.setEventHandler(
     BLEConnected,
-    onClientConnected
+    onCentralConnected
   );
-  // attach callback when client disconnects
+  // attach callback when central disconnects
   blePeripheral.setEventHandler(
     BLEDisconnected,
-    onClientDisconnected
+    onCentralDisconnected
   );
   
   blePeripheral.setAdvertisedServiceUuid(service.uuid());
@@ -74,19 +72,19 @@ void setup() {
   );
 
   Serial.print("Starting ");
-  Serial.println(BLUETOOTH_DEVICE_NAME);
+  Serial.println(bluetoothDeviceName);
   blePeripheral.begin();
 }
 
 
 
 void loop() {
-  if (dataWritten) {
-    dataWritten = false;
+  if (bleDataWritten) {
+    bleDataWritten = false; // ensures only happens once
 
     Serial.print("Incoming message found: ");
-    Serial.println((char*) message);
-    sendMessage((unsigned char*)message);
+    Serial.println((char*) bleMessage);
+    sendBleMessage((unsigned char*)bleMessage);
   }
 
 }

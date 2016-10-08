@@ -1,38 +1,35 @@
-#include <CurieBle.h>
+#include "CurieBle.h"
 
-static const char* BLUETOOTH_DEVICE_NAME = "LedRemote";
+static const char* bluetoothDeviceName = "LedRemote";
 
-static const char* SERVICE_UUID = "180C"; 
-static const char* CHARACTERISTIC_UUID = "2A56";
-static const int   TRANSMISSION_LENGTH = 2; 
-static const unsigned int FOOTER_POSITION = TRANSMISSION_LENGTH - 1;
-static const unsigned int DATA_POSITION = 0;
+static const int   characteristicTransmissionLength = 2; 
+static const unsigned int bleDataFooterPosition = 1;
+static const unsigned int bleMessageDataPosition = 0;
 
-static const unsigned int COMMAND_LED_OFF = 0x01; 
-static const unsigned int COMMAND_LED_ON = 0x02;
+static const unsigned int bleCommandLedOff = 1; 
+static const unsigned int bleCommandLedOn = 2;
 
-static const unsigned int MESSAGE_TYPE_ERROR = 0x00;
-static const unsigned int MESSAGE_TYPE_CONFIRMATION = 0x01;
-static const unsigned int MESSAGE_TYPE_COMMAND = 0x02;
+static const unsigned int bleResponseError = 0;
+static const unsigned int bleResponseConfirmation = 1;
+static const unsigned int bleResponseCommand = 2;
 
 
 static const byte ledPin = 13;
-static const unsigned int LED_STATE_ERROR = 0x00;
-static const unsigned int LED_STATE_ON = 0x01;
-static const unsigned int LED_STATE_OFF = 0x02;
-int ledState = LED_STATE_OFF;
+static const unsigned int ledError = 0;
+static const unsigned int ledOn = 1;
+static const unsigned int ledOff = 2;
+int ledState = ledOff;
 
-char message[TRANSMISSION_LENGTH];
-int messageLength;
+char bleMessage[characteristicTransmissionLength];
 const char* uuid;
-bool commandReceived = false;
+bool bleCommandReceived = false;
 
 
-BLEService service(SERVICE_UUID);
+BLEService service("180C");
 BLECharacteristic characteristic(
-  CHARACTERISTIC_UUID,
+  "2A56",
   BLEWrite | BLERead | BLENotify,
-  TRANSMISSION_LENGTH
+  characteristicTransmissionLength
 );
 
 BLEPeripheral blePeripheral;
@@ -41,41 +38,29 @@ BLEPeripheral blePeripheral;
 void onCharacteristicWritten(BLECentral& central, 
   BLECharacteristic &characteristic) {
     
-  commandReceived = true;
+  bleCommandReceived = true;
   uuid = characteristic.uuid();
-
-  messageLength = characteristic.valueLength();
-  memcpy((char*) message, (const char*) characteristic.value(), messageLength);
+  
+  strcpy((char*) bleMessage, (const char*) characteristic.value());
 }
 
-void sendCommandConfirmation() {
-  byte confirmation[TRANSMISSION_LENGTH] = {0x0};
-  confirmation[DATA_POSITION] = (byte)ledState;
-  confirmation[FOOTER_POSITION] = (byte)MESSAGE_TYPE_CONFIRMATION;
-  characteristic.setValue((const unsigned char*) confirmation, TRANSMISSION_LENGTH);
-}
-
-void turnLedOn() {
-  Serial.println("Turning LED on");
-  digitalWrite(ledPin, HIGH);
-  ledState = LED_STATE_ON;
-}
-void turnLedOff() {
-  Serial.println("Turning LED off");
-  digitalWrite(ledPin, LOW);
-  ledState = LED_STATE_OFF;
+void sendBleCommandConfirmation(int ledState) {
+  byte confirmation[characteristicTransmissionLength] = {0x0};
+  confirmation[bleMessageDataPosition] = (byte)ledState;
+  confirmation[bleDataFooterPosition] = (byte)bleResponseConfirmation;
+  characteristic.setValue((const unsigned char*) confirmation, characteristicTransmissionLength);
 }
 
 
-// Client connected.  Print MAC address
-void onClientConnected(BLECentral& central) {
-  Serial.print("Device connected: ");
+// Central connected.  Print MAC address
+void onCentralConnected(BLECentral& central) {
+  Serial.print("Central connected: ");
   Serial.println(central.address());
 }
 
-// Client disconnected
-void onClientDisconnected(BLECentral& central) {
-  Serial.println("Device disconnected");
+// Central disconnected
+void onCentralDisconnected(BLECentral& central) {
+  Serial.println("Central disconnected");
 }
 
 
@@ -83,19 +68,19 @@ void setup() {
   Serial.begin(9600);
   while (!Serial) {;}
 
-  turnLedOff();
+  digitalWrite(ledPin, LOW); // start with LED off
   
-  blePeripheral.setLocalName(BLUETOOTH_DEVICE_NAME);
+  blePeripheral.setLocalName(bluetoothDeviceName);
   
-  // attach callback when client connects
+  // attach callback when central connects
   blePeripheral.setEventHandler(
     BLEConnected,
-    onClientConnected
+    onCentralConnected
   );
-  // attach callback when client disconnects
+  // attach callback when centlal disconnects
   blePeripheral.setEventHandler(
     BLEDisconnected,
-    onClientDisconnected
+    onCentralDisconnected
   );
 
   
@@ -109,23 +94,27 @@ void setup() {
   );
 
   Serial.print("Starting ");
-  Serial.println(BLUETOOTH_DEVICE_NAME);
+  Serial.println(bluetoothDeviceName);
   blePeripheral.begin();
 }
 
 void loop() {
-  if (commandReceived) {
-    commandReceived = false;
+  if (bleCommandReceived) {
+    bleCommandReceived = false; // ensures only executed once
   
     // incoming command is one byte
-    unsigned int command = message[DATA_POSITION]; 
-    if (command == COMMAND_LED_ON) {
-      turnLedOn();
-      sendCommandConfirmation();
+    unsigned int command = bleMessage[bleMessageDataPosition]; 
+    if (command == bleCommandLedOn) {
+      Serial.println("Turning LED on");
+      ledState = HIGH;
+      sendBleCommandConfirmation(ledState);
     } else {
-      turnLedOff();
-      sendCommandConfirmation();
+      Serial.println("Turning LED off");
+      ledState = LOW;
+      sendBleCommandConfirmation(ledState);
     }
+
+    digitalWrite(ledPin, ledState);
   }
 
 }
